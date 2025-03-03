@@ -56,7 +56,7 @@ export default () => {
                     setSidebarType(sidebarType);
                     setHeadTitle(sidebarType);
                 }}/>
-                <main className="mr-14 grid gap-4 p-4 md:gap-8 md:p-8">
+                <main className="mr-14 grid gap-4 p-4 md:gap-8 md:p-8 h-full">
                     {sidebarType === SidebarType.home && <Home/>}
                     {sidebarType === SidebarType.settings && <SettingsPage/>}
                 </main>

@@ -3,7 +3,11 @@
 @tailwind utilities;
 
 
+
 @layer base {
+    .pdfViewer * {
+        all: revert;
+      }
     :root {
         --background: 0 0% 100%;
         --foreground: 224 71.4% 4.1%;

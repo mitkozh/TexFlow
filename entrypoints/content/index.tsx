@@ -28,6 +28,6 @@ export default defineContentScript({
             },
         });
 
-        ui.mount();
+        // ui.mount();
     },
 });

@@ -1,7 +1,8 @@
 export enum MessageType {
     clickExtIcon = "clickExtIcon",
     changeTheme = "changeTheme",
-    changeLocale = "changeLocale"
+    changeLocale = "changeLocale",
+    fetchDocumentContent = "fetchDocumentContent"
 }
 
 export enum MessageFrom {

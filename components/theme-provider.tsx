@@ -16,7 +16,7 @@ export const ThemeProvider = ({children}: { children: any }) => {
     };
 
     async function initTheme() {
-        let data = await browser.storage.local.get('theme');
+        let data: { theme?: string } = await browser.storage.local.get('theme');
         if (data.theme) {
             setTheme(data.theme)
         }

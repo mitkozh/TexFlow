@@ -1,7 +1,6 @@
 import React, {useEffect, useRef, useState} from 'react';
 import './App.module.css';
 import '../../assets/main.css'
-import {Home} from "@/entrypoints/content/home.tsx";
 import {SettingsPage} from "@/entrypoints/content/settings.tsx";
 import Sidebar, {SidebarType} from "@/entrypoints/sidebar.tsx";
 import {browser} from "wxt/browser";
@@ -9,6 +8,7 @@ import ExtMessage, {MessageType} from "@/entrypoints/types.ts";
 import Header from "@/entrypoints/content/header.tsx";
 import {useTranslation} from "react-i18next";
 import {useTheme} from "@/components/theme-provider.tsx";
+import Home from './home';
 
 export default () => {
     const [showContent, setShowContent] = useState(true);
@@ -86,7 +86,5 @@ export default () => {
             </div>
             }
         </div>
-
-
     )
 };
