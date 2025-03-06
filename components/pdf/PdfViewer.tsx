@@ -28,6 +28,7 @@ const PdfJsViewer: React.FC<Props> = ({
   const [pdfWrapper, setPdfWrapper] = useState<PDFJSWrapper | null>(null);
   const [scale, setScale] = useState<number>(1);
   const [numPages, setNumPages] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const handleScaleChange = (newScale: number) => {
     setScale(newScale);
@@ -72,8 +73,22 @@ const PdfJsViewer: React.FC<Props> = ({
       };
 
       const handlePageChange = () => {
-        if (pdfWrapper?.currentPosition)
-          onPageChange(pdfWrapper.currentPosition.page + 1);
+        if (pdfWrapper?.currentPosition) {
+          const newPage = pdfWrapper.currentPosition.page + 1;
+          setCurrentPage(newPage); 
+          onPageChange(newPage);
+        }
+      };
+
+
+      const handleScroll = () => {
+        requestAnimationFrame(() => {
+          if (pdfWrapper) {
+            const newPage = pdfWrapper.viewer.currentPageNumber;
+            setCurrentPage(newPage);
+            onPageChange(newPage);
+          }
+        });
       };
 
       // Ensure the text layer listens for double clicks.
@@ -90,11 +105,14 @@ const PdfJsViewer: React.FC<Props> = ({
       pdfWrapper.eventBus.on('pagesinit', handlePagesInit);
       pdfWrapper.eventBus.on('pagechange', handlePageChange);
       pdfWrapper.eventBus.on('textlayerrendered', handleTextLayerRendered);
+      pdfWrapper.viewer.container.addEventListener('scroll', handleScroll);
+
 
       return () => {
         pdfWrapper.eventBus.off('pagesinit', handlePagesInit);
         pdfWrapper.eventBus.off('pagechange', handlePageChange);
         pdfWrapper.eventBus.off('textlayerrendered', handleTextLayerRendered);
+        pdfWrapper.viewer.container.removeEventListener('scroll', handleScroll);
       };
     }
   }, [pdfWrapper, onPageChange, scale]);
@@ -127,11 +145,7 @@ const PdfJsViewer: React.FC<Props> = ({
         </button>
         
         <div className="text-sm text-gray-700">
-          Page:{' '}
-          {pdfWrapper?.currentPosition?.page !== undefined
-            ? pdfWrapper.currentPosition.page + 1
-            : '-'}{' '}
-          / {numPages}
+          Page: {currentPage} / {numPages}
         </div>
         
         <ZoomDropdown scale={scale} setScale={handleScaleChange} />
