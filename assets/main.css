@@ -6,7 +6,13 @@
 @layer base {
     .pdfViewer * {
         all: revert;
-      }
+    }
+
+    /* Add outline to PDF pages */
+    .pdfViewer .page .canvasWrapper {
+        @apply outline outline-1 outline-[#c7c7c7];
+    }
+
     :root {
         --background: 0 0% 100%;
         --foreground: 224 71.4% 4.1%;
@@ -52,7 +58,6 @@
         --ring: 263.4 70% 50.4%;
     }
 }
-
 
 @layer base {
     * {

@@ -1,70 +1,78 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Button } from "@/components/ui/button"
+import { ChevronDown } from "lucide-react"
 
 interface ZoomDropdownProps {
-  scale: number;
-  setScale: (scale: number) => void;
+  scale: number | string;
+  setScale: (scale: number | string) => void;
 }
 
-const zoomValues = [0.5, 0.75, 1, 1.5, 2, 4];
-
 const ZoomDropdown: React.FC<ZoomDropdownProps> = ({ scale, setScale }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [customValue, setCustomValue] = useState(`${Math.round(scale * 100)}%`);
+  // Predefined zoom options
+  const numericZoomOptions = [50, 75, 100, 150, 200, 400].map(percentage => ({
+    value: percentage / 100,
+    label: `${percentage}%`
+  }));
+  
+  const specialZoomOptions = [
+    { value: 'auto', label: 'Automatic' },
+    { value: 'page-fit', label: 'Page Fit' },
+    { value: 'page-width', label: 'Page Width' },
+    { value: 'page-height', label: 'Page Height' },
+  ];
 
-  useEffect(() => {
-    setCustomValue(`${Math.round(scale * 100)}%`);
-  }, [scale]);
-
-  const handleCustomZoom = (value: string) => {
-    const numericValue = parseInt(value.replace('%', '')) / 100;
-    if (numericValue >= 0.1 && numericValue <= 9.99) {
-      setScale(numericValue);
+  // Get the display value for the current scale
+  const getDisplayValue = () => {
+    if (typeof scale === 'string') {
+      const option = specialZoomOptions.find(opt => opt.value === scale);
+      return option ? option.label : scale;
+    } else {
+      return `${Math.round(scale * 100)}%`;
     }
   };
 
   return (
-    <div className="relative">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="px-2 py-1 bg-gray-100 text-sm text-gray-700 border border-gray-300 rounded min-w-[80px] hover:bg-gray-200/80 focus:outline-none"
-      >
-        {`${Math.round(scale * 100)}%`}
-      </button>
-      
-      {isOpen && (
-        <div className="absolute top-full right-0 mt-1 w-40 bg-white border border-gray-200 rounded shadow-lg z-50">
-          <div className="p-2">
-            <input
-              type="text"
-              value={customValue}
-              onChange={(e) => setCustomValue(e.target.value.replace(/[^0-9%]/g, ''))}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  handleCustomZoom(customValue);
-                  setIsOpen(false);
-                }
-              }}
-              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none"
-            />
-          </div>
-          <hr className="my-1 border-gray-200" />
-          <div className="max-h-48 overflow-y-auto">
-            {zoomValues.map((value) => (
-              <button
-                key={value}
-                onClick={() => {
-                  setScale(value);
-                  setIsOpen(false);
-                }}
-                className="w-full px-3 py-1 text-left text-sm hover:bg-gray-100 focus:outline-none"
-              >
-                {`${value * 100}%`}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline">
+          {getDisplayValue()}
+          <ChevronDown className="ml-2 h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel>Zoom Level</DropdownMenuLabel>
+        
+        {/* Numeric zoom options */}
+        {numericZoomOptions.map(option => (
+          <DropdownMenuItem 
+            key={option.label}
+            onClick={() => setScale(option.value)}
+          >
+            {option.label}
+          </DropdownMenuItem>
+        ))}
+        
+        <DropdownMenuSeparator />
+        
+        {/* Special zoom options */}
+        {specialZoomOptions.map(option => (
+          <DropdownMenuItem 
+            key={option.value}
+            onClick={() => setScale(option.value)}
+          >
+            {option.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 };
 

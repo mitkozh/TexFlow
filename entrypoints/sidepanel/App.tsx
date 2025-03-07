@@ -51,12 +51,12 @@ export default () => {
         <div className={theme}>
             {<div
                 className="fixed top-0 right-0 h-screen w-full bg-background z-[1000000000000] rounded-l-xl shadow-2xl">
-                <Header headTitle={headTitle}/>
+                {/* <Header headTitle={headTitle}/> */}
                 <Sidebar sideNav={(sidebarType: SidebarType) => {
                     setSidebarType(sidebarType);
                     setHeadTitle(sidebarType);
                 }}/>
-                <main className="mr-14 grid gap-4 p-4 md:gap-8 md:p-8 h-full">
+                <main className="mr-14 grid gap-4 p-2 md:gap-8 md:p-8 h-full ">
                     {sidebarType === SidebarType.home && <Home/>}
                     {sidebarType === SidebarType.settings && <SettingsPage/>}
                 </main>

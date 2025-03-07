@@ -69,18 +69,12 @@ export function Home() {
     );
   }
 
-  return (
-    pdfUrl ? (
-      <PdfViewer
-        pdfUrl={pdfUrl}
-        onPageChange={(page) => console.log('Current page:', page)}
-        onRecompile={handleManualCompile}
-        compiling={compiling}
-      />
-    ) : (
-      <div className="flex items-center justify-center h-full text-gray-600">
-        {compiling ? 'Compiling document...' : 'No PDF available'}
-      </div>
-    )
-  );
+return (
+  <PdfViewer
+    pdfUrl={pdfUrl}
+    onPageChange={(page) => console.log('Current page:', page)}
+    onRecompile={handleManualCompile}
+    compiling={compiling}
+  />
+);
 }

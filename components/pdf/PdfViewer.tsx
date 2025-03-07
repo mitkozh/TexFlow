@@ -3,7 +3,7 @@ import * as PDFJS from 'pdfjs-dist';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import { PDFJSWrapper } from '@/lib/pdf/PDFJSWrapper';
 import { usePdfViewerZoom } from '@/lib/hooks/usePdfViewerZoom';
-import ZoomDropdown from './ZoomDropdown';
+import { PdfToolbar } from './PdfToolbar';
 
 // Set up the worker
 PDFJS.GlobalWorkerOptions.workerSrc = new URL(
@@ -11,77 +11,111 @@ PDFJS.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url
 ).toString();
 
-interface Props {
-  pdfUrl: string;
+interface PdfViewerProps {
+  pdfUrl: string | null;
   onPageChange: (page: number) => void;
   onRecompile: () => void;
   compiling: boolean;
+  error?: string | null;
 }
 
-const PdfJsViewer: React.FC<Props> = ({
+const PdfJsViewer: React.FC<PdfViewerProps> = ({
   pdfUrl,
   onPageChange,
   onRecompile,
   compiling,
+  error,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [pdfWrapper, setPdfWrapper] = useState<PDFJSWrapper | null>(null);
-  const [scale, setScale] = useState<number>(1);
+  const [scale, setScale] = useState<number | string>(1);
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
+  const previousPdfUrl = useRef<string | null>(null);
 
-  const handleScaleChange = (newScale: number) => {
+  const handleScaleChange = (newScale: number | string) => {
     setScale(newScale);
-    if (pdfWrapper) {
-      pdfWrapper.viewer.currentScale = newScale;
+    if (!pdfWrapper) return;
+
+    if (typeof newScale === 'string' && ['auto', 'page-fit', 'page-width', 'page-height'].includes(newScale)) {
+      pdfWrapper.viewer.currentScaleValue = newScale;
+    } else {
+      const numericScale = typeof newScale === 'string' ? parseFloat(newScale) : newScale;
+      if (!isNaN(numericScale)) {
+        pdfWrapper.viewer.currentScale = numericScale;
+      }
     }
   };
 
   usePdfViewerZoom(pdfWrapper, (newScale) => handleScaleChange(parseFloat(newScale)));
 
-  
+  // Initialize PDF wrapper
   useEffect(() => {
-    if (containerRef.current) {
-      const wrapper = new PDFJSWrapper(containerRef.current);
-      setPdfWrapper(wrapper);
+    if (!containerRef.current) return;
+    
+    const wrapper = new PDFJSWrapper(containerRef.current);
+    setPdfWrapper(wrapper);
 
-      return () => {
-        wrapper.viewer.cleanup();
-      };
-    }
-  }, []);
+    return () => {
+      wrapper.viewer.cleanup();
+      setPdfWrapper(null);
+    };
+  }, [pdfUrl]);
 
+  // Reset state when PDF URL changes
   useEffect(() => {
-    if (pdfWrapper && pdfUrl) {
-      pdfWrapper
-        .loadDocument(pdfUrl)
-        .then(pdfDocument => {
-          if (pdfDocument) {
-            setNumPages(pdfDocument.numPages);
-          }
-        })
-        .catch(error => {
-          console.error('Failed to load PDF document:', error);
-        });
+    if (previousPdfUrl.current !== pdfUrl) {
+      setNumPages(0);
+      setCurrentPage(1);
+      previousPdfUrl.current = pdfUrl;
     }
+  }, [pdfUrl]);
+
+  // Load PDF document
+  useEffect(() => {
+    if (!pdfWrapper || !pdfUrl) return;
+
+    let isMounted = true;
+    const loadingTask = pdfWrapper.loadDocument(pdfUrl);
+
+    loadingTask.then((pdfDocument) => {
+      if (isMounted && pdfDocument) {
+        setNumPages(pdfDocument.numPages);
+        pdfWrapper.viewer.currentPageNumber = 1;
+      }
+    }).catch((error) => {
+      console.error('Failed to load PDF document:', error);
+    });
+
+    return () => {
+      isMounted = false;
+      loadingTask.then((pdf) => pdf?.destroy());
+    };
   }, [pdfWrapper, pdfUrl]);
 
+  // Set up event listeners
   useEffect(() => {
-    if (pdfWrapper) {
-      const handlePagesInit = () => {
-        pdfWrapper.viewer.currentScale = scale;
-      };
+    if (!pdfWrapper) return;
 
-      const handlePageChange = () => {
+    const handlers = {
+      pagesInit: () => {
+        if (typeof scale === 'string' && ['auto', 'page-fit', 'page-width', 'page-height'].includes(scale)) {
+          pdfWrapper.viewer.currentScaleValue = scale;
+        } else {
+          const numericScale = typeof scale === 'string' ? parseFloat(scale) : scale;
+          if (!isNaN(numericScale)) {
+            pdfWrapper.viewer.currentScale = numericScale;
+          }
+        }
+      },
+      pageChange: () => {
         if (pdfWrapper?.currentPosition) {
           const newPage = pdfWrapper.currentPosition.page + 1;
-          setCurrentPage(newPage); 
+          setCurrentPage(newPage);
           onPageChange(newPage);
         }
-      };
-
-
-      const handleScroll = () => {
+      },
+      scroll: () => {
         requestAnimationFrame(() => {
           if (pdfWrapper) {
             const newPage = pdfWrapper.viewer.currentPageNumber;
@@ -89,34 +123,30 @@ const PdfJsViewer: React.FC<Props> = ({
             onPageChange(newPage);
           }
         });
-      };
-
-      // Ensure the text layer listens for double clicks.
-      const handleTextLayerRendered = () => {
-        const textLayers =
-          containerRef.current?.querySelectorAll('.textLayer');
-        textLayers?.forEach(textLayer => {
+      },
+      textLayerRendered: () => {
+        containerRef.current?.querySelectorAll('.textLayer').forEach(textLayer => {
           if (textLayer instanceof HTMLElement) {
             textLayer.dataset.listeningForDoubleClick = 'true';
           }
         });
-      };
+      }
+    };
 
-      pdfWrapper.eventBus.on('pagesinit', handlePagesInit);
-      pdfWrapper.eventBus.on('pagechange', handlePageChange);
-      pdfWrapper.eventBus.on('textlayerrendered', handleTextLayerRendered);
-      pdfWrapper.viewer.container.addEventListener('scroll', handleScroll);
+    pdfWrapper.eventBus.on('pagesinit', handlers.pagesInit);
+    pdfWrapper.eventBus.on('pagechange', handlers.pageChange);
+    pdfWrapper.eventBus.on('textlayerrendered', handlers.textLayerRendered);
+    pdfWrapper.viewer.container.addEventListener('scroll', handlers.scroll);
 
-
-      return () => {
-        pdfWrapper.eventBus.off('pagesinit', handlePagesInit);
-        pdfWrapper.eventBus.off('pagechange', handlePageChange);
-        pdfWrapper.eventBus.off('textlayerrendered', handleTextLayerRendered);
-        pdfWrapper.viewer.container.removeEventListener('scroll', handleScroll);
-      };
-    }
+    return () => {
+      pdfWrapper.eventBus.off('pagesinit', handlers.pagesInit);
+      pdfWrapper.eventBus.off('pagechange', handlers.pageChange);
+      pdfWrapper.eventBus.off('textlayerrendered', handlers.textLayerRendered);
+      pdfWrapper.viewer.container.removeEventListener('scroll', handlers.scroll);
+    };
   }, [pdfWrapper, onPageChange, scale]);
 
+  // Handle container resizing
   useEffect(() => {
     const resizeObserver = new ResizeObserver(() => {
       pdfWrapper?.updateOnResize();
@@ -133,27 +163,27 @@ const PdfJsViewer: React.FC<Props> = ({
     };
   }, [pdfWrapper]);
 
-  return (
-    <div className="flex flex-col w-full h-full bg-gray-100">
-      {/* Toolbar - equivalent to .toolbar */}
-      <div className="flex items-center justify-between h-10 px-4 py-2 border-b border-gray-200 bg-white">
-        <button
-          onClick={onRecompile}
-          disabled={compiling}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"        >
-          {compiling ? 'Compiling...' : 'Recompile'}
-        </button>
-        
-        <div className="text-sm text-gray-700">
-          Page: {currentPage} / {numPages}
+  const renderContent = () => {
+    if (error) {
+      return (
+        <div className="flex-1 flex items-center justify-center bg-red-50 text-red-700 p-4 rounded-md">
+          Error: {error}
         </div>
-        
-        <ZoomDropdown scale={scale} setScale={handleScaleChange} />
-      </div>
-      
-      {/* PDF Viewer Container - equivalent to .pdf-viewer */}
-      <div className="flex-1 relative overflow-hidden">
-        {/* Equivalent to .pdfjs-viewer-outer */}
+      );
+    }
+
+    if (!pdfUrl) {
+      return (
+        <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: "rgb(249, 251, 253)" }}>
+          <div className="text-gray-600">
+            {compiling ? 'Compiling document...' : 'No PDF available'}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex-1 relative overflow-hidden" style={{ backgroundColor: "rgb(249, 251, 253)" }}>
         <div className="overflow-hidden" tabIndex={-1}>
           <div
             className="absolute w-full h-full overflow-y-auto"
@@ -164,11 +194,25 @@ const PdfJsViewer: React.FC<Props> = ({
           </div>
         </div>
       </div>
+    );
+  };
+
+  return (
+    <div className="flex flex-col w-full h-full">
+      <PdfToolbar
+        currentPage={currentPage}
+        numPages={numPages}
+        scale={scale}
+        onScaleChange={handleScaleChange}
+        onRecompile={onRecompile}
+        compiling={compiling}
+      />
+      {renderContent()}
     </div>
   );
 };
 
-const PdfViewer: React.FC<Props> = props => {
+const PdfViewer: React.FC<PdfViewerProps> = props => {  
   return (
     <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-gray-600">Loading PDF Viewer...</div>}>
       <PdfJsViewer {...props} />
