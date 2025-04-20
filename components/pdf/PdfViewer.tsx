@@ -3,6 +3,7 @@ import * as PDFJS from 'pdfjs-dist';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import { PDFJSWrapper } from '@/lib/pdf/PDFJSWrapper';
 import { usePdfViewerZoom } from '@/lib/hooks/usePdfViewerZoom';
+import { usePdfCompilation } from '@/lib/hooks/usePdfCompilation';
 import { PdfToolbar } from './PdfToolbar';
 
 // Set up the worker
@@ -12,20 +13,38 @@ PDFJS.GlobalWorkerOptions.workerSrc = new URL(
 ).toString();
 
 interface PdfViewerProps {
-  pdfUrl: string | null;
-  onPageChange: (page: number) => void;
-  onRecompile: () => void;
-  compiling: boolean;
+  // Existing props for backward compatibility
+  pdfUrl?: string | null;
+  onPageChange?: (page: number) => void;
+  onRecompile?: () => void;
+  compiling?: boolean;
   error?: string | null;
+  // New props for internal compilation
+  mainFileContent?: string;
+  fetchContent?: () => Promise<string>;
 }
 
-const PdfJsViewer: React.FC<PdfViewerProps> = ({
-  pdfUrl,
-  onPageChange,
-  onRecompile,
-  compiling,
-  error,
-}) => {
+const PdfJsViewer: React.FC<PdfViewerProps> = (props) => {
+  const {
+    pdfUrl: externalPdfUrl,
+    onPageChange: externalOnPageChange,
+    onRecompile: externalOnRecompile,
+    compiling: externalCompiling,
+    error: externalError,
+    mainFileContent,
+    fetchContent,
+  } = props;
+
+  // Use internal compilation if mainFileContent is provided
+  const pdfCompilation = mainFileContent
+    ? usePdfCompilation({ mainFileContent, fetchContent })
+    : null;
+
+  const pdfUrl = pdfCompilation ? pdfCompilation.pdfUrl : externalPdfUrl ?? null;
+  const compiling = pdfCompilation ? pdfCompilation.compiling : externalCompiling ?? false;
+  const compileError = pdfCompilation ? (pdfCompilation.compileError ? (typeof pdfCompilation.compileError === 'string' ? pdfCompilation.compileError : pdfCompilation.compileError.message) : null) : externalError ?? null;
+  const recompileFn = pdfCompilation ? pdfCompilation.recompile : externalOnRecompile;
+
   const containerRef = useRef<HTMLDivElement>(null);
   const [pdfWrapper, setPdfWrapper] = useState<PDFJSWrapper | null>(null);
   const [scale, setScale] = useState<number | string>(1);
@@ -112,7 +131,7 @@ const PdfJsViewer: React.FC<PdfViewerProps> = ({
         if (pdfWrapper?.currentPosition) {
           const newPage = pdfWrapper.currentPosition.page + 1;
           setCurrentPage(newPage);
-          onPageChange(newPage);
+          externalOnPageChange?.(newPage);
         }
       },
       scroll: () => {
@@ -120,7 +139,7 @@ const PdfJsViewer: React.FC<PdfViewerProps> = ({
           if (pdfWrapper) {
             const newPage = pdfWrapper.viewer.currentPageNumber;
             setCurrentPage(newPage);
-            onPageChange(newPage);
+            externalOnPageChange?.(newPage);
           }
         });
       },
@@ -144,7 +163,7 @@ const PdfJsViewer: React.FC<PdfViewerProps> = ({
       pdfWrapper.eventBus.off('textlayerrendered', handlers.textLayerRendered);
       pdfWrapper.viewer.container.removeEventListener('scroll', handlers.scroll);
     };
-  }, [pdfWrapper, onPageChange, scale]);
+  }, [pdfWrapper, externalOnPageChange, scale]);
 
   // Handle container resizing
   useEffect(() => {
@@ -163,11 +182,18 @@ const PdfJsViewer: React.FC<PdfViewerProps> = ({
     };
   }, [pdfWrapper]);
 
+  const handlePageChange = (newPage: number) => {
+    if (pdfWrapper && newPage >= 1 && newPage <= numPages) {
+      pdfWrapper.viewer.currentPageNumber = newPage;
+      // The existing 'pagechange' event listener will update the currentPage state
+    }
+  };
+
   const renderContent = () => {
-    if (error) {
+    if (compileError) {
       return (
         <div className="flex-1 flex items-center justify-center bg-red-50 text-red-700 p-4 rounded-md">
-          Error: {error}
+          Error: {compileError}
         </div>
       );
     }
@@ -183,7 +209,7 @@ const PdfJsViewer: React.FC<PdfViewerProps> = ({
     }
 
     return (
-      <div className="flex-1 relative overflow-hidden" style={{ backgroundColor: "rgb(249, 251, 253)" }}>
+      <div className="flex-1 relative overflow-hidden border" style={{ backgroundColor: "rgb(249, 251, 253)" }}>
         <div className="overflow-hidden" tabIndex={-1}>
           <div
             className="absolute w-full h-full overflow-y-auto"
@@ -204,15 +230,16 @@ const PdfJsViewer: React.FC<PdfViewerProps> = ({
         numPages={numPages}
         scale={scale}
         onScaleChange={handleScaleChange}
-        onRecompile={onRecompile}
-        compiling={compiling}
+        onPageChange={handlePageChange} // Pass the handler here
+        onRecompile={recompileFn || (() => {})}
+        compiling={!!compiling}
       />
       {renderContent()}
     </div>
   );
 };
 
-const PdfViewer: React.FC<PdfViewerProps> = props => {  
+const PdfViewer: React.FC<PdfViewerProps> = props => {
   return (
     <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-gray-600">Loading PDF Viewer...</div>}>
       <PdfJsViewer {...props} />
