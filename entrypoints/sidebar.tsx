@@ -17,7 +17,7 @@ const Sidebar = (
     const [sidebarType, setSidebarType] = useState<SidebarType>(SidebarType.home);
     return (
         <aside
-            className="absolute inset-y-0 right-0 z-10 flex w-14 flex-col border-r bg-background border-l-[1px]">
+            className="absolute inset-y-0 right-0 z-101 flex w-14 flex-col border-r bg-background border-l-[1px]">
             {closeContent && <a
                 className="hover:cursor-pointer flex h-9 w-9 items-center justify-center  text-muted-foreground transition-colors hover:text-foreground ml-auto mr-auto"
                 href="#" onClick={() => {

@@ -44,7 +44,7 @@ const ZoomDropdown: React.FC<ZoomDropdownProps> = ({ scale, setScale }) => {
       <DropdownMenuTrigger asChild>
         <Button variant="outline">
           {getDisplayValue()}
-          <ChevronDown className="ml-2 h-4 w-4" />
+          <ChevronDown className="hidden xs:inline ml-2 h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

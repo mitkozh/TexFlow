@@ -55,7 +55,7 @@ export const PdfToolbar: React.FC<PdfToolbarProps> = ({
   };
 
   return (
-    <Card className="flex items-center justify-between px-3 py-2 border-b rounded-none rounded-tl-lg shadow-sm bg-background/80 backdrop-blur-sm">
+    <Card className="flex items-center justify-between px-3 py-2 border-b rounded-none rounded-tl-lg shadow-sm bg-background/80 backdrop-blur-sm z-[100] relative">
       <div className="flex items-center gap-2">
         <TooltipProvider>
           <Tooltip>
@@ -98,7 +98,7 @@ export const PdfToolbar: React.FC<PdfToolbarProps> = ({
             <TooltipContent>Previous Page</TooltipContent>
           </Tooltip>
         </TooltipProvider>
-        <span className="text-xs text-muted-foreground">Page</span>
+        <span className="hidden sm:inline text-xs text-muted-foreground">Page</span>
         <Input
           type="text"
           value={pageInput}
@@ -109,7 +109,7 @@ export const PdfToolbar: React.FC<PdfToolbarProps> = ({
           disabled={numPages <= 0}
           aria-label="Page number"
         />
-        <span className="text-xs text-muted-foreground">/ {numPages > 0 ? numPages : '-'}</span>
+        <span className="hidden sm:inline text-xs text-muted-foreground">/ {numPages > 0 ? numPages : '-'}</span>
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
