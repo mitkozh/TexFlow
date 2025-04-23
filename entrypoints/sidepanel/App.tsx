@@ -11,6 +11,8 @@ import {SettingsPage} from "@/entrypoints/sidepanel/settings.tsx";
 import {useTheme} from "@/components/theme-provider.tsx";
 import {useTranslation} from 'react-i18next';
 import Header from "@/entrypoints/sidepanel/header.tsx";
+import { GoogleDocsAdapter, DriveFile } from "@/lib/adapters/DocsAdapter";
+import { FileExplorer } from "@/components/drive/FileExplorer";
 
 export default () => {
     const [showButton, setShowButton] = useState(false)
@@ -22,6 +24,18 @@ export default () => {
     const cardRef = useRef<HTMLDivElement>(null);
     const {theme, toggleTheme} = useTheme();
     const {t, i18n} = useTranslation();
+    const [driveFolderId, setDriveFolderId] = useState<string | null>(null);
+    const [driveFiles, setDriveFiles] = useState<DriveFile[]>([]);
+    const [driveLoading, setDriveLoading] = useState(false);
+    const [driveError, setDriveError] = useState<string | null>(null);
+    const [selectedFile, setSelectedFile] = useState<DriveFile | null>(null);
+    const [refreshKey, setRefreshKey] = useState(0);
+    const adapter = useRef(new GoogleDocsAdapter()).current;
+    const [docId, setDocId] = useState<string>("");
+
+    useEffect(() => {
+        adapter.getDocumentId().then(id => setDocId(id || ""));
+    }, [adapter]);
 
     async function initI18n() {
         let data = await browser.storage.local.get('i18n');
@@ -47,6 +61,41 @@ export default () => {
         initI18n();
     }, []);
 
+    // On startup, ensure Drive environment
+    useEffect(() => {
+        const setupDrive = async () => {
+            try {
+                const adapter = new GoogleDocsAdapter();
+                const docId = await adapter.getDocumentId();
+                if (docId) {
+                    const { folderId } = await adapter.ensureDriveEnvironment(docId);
+                    setDriveFolderId(folderId);
+                }
+            } catch (e: any) {
+                setDriveError(e.message || String(e));
+            }
+        };
+        setupDrive();
+    }, []);
+
+    // When sidebarType is SidebarType.drive and folderId is set, list files
+    useEffect(() => {
+        if (sidebarType === SidebarType.drive && driveFolderId) {
+            setDriveLoading(true);
+            setDriveError(null);
+            const adapter = new GoogleDocsAdapter();
+            adapter.getDocumentId().then(docId => {
+                if (docId) {
+                    adapter.listDriveFiles(docId)
+                        .then(setDriveFiles)
+                        .then(() => console.log(driveFiles))
+                        .catch(e => setDriveError(e.message || String(e)))
+                        .finally(() => setDriveLoading(false));
+                }
+            });
+        }
+    }, [sidebarType, driveFolderId]);
+
     return (
         <div className={theme}>
             {<div
@@ -55,10 +104,18 @@ export default () => {
                 <Sidebar sideNav={(sidebarType: SidebarType) => {
                     setSidebarType(sidebarType);
                     setHeadTitle(sidebarType);
-                }}/>
-                <main className="mr-14 grid gap-4 p-2 md:gap-8 h-full ">
+                }} />
+                <main className="mr-14 grid gap-4 p-2 md:gap-8 h-full">
                     {sidebarType === SidebarType.home && <Home/>}
                     {sidebarType === SidebarType.settings && <SettingsPage/>}
+                    {sidebarType === SidebarType.drive && driveFolderId && docId && (
+                        <div className="flex h-full min-w-0 max-w-full">
+                            <div className="flex-1 h-full min-w-0 max-w-full">
+                                <FileExplorer
+                                />
+                            </div>
+                        </div>
+                    )}
                 </main>
             </div>
             }

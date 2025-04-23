@@ -8,6 +8,27 @@
         all: revert;
     }
 
+    .file-explorer * {
+        font-family: inherit;
+    }
+
+    
+    .file-explorer *:not(svg),
+    .file-explorer *:not(svg) * {
+        /* Apply more targeted reset properties here,
+       excluding properties that affect SVG rendering */
+        margin: unset;
+        padding: unset;
+        box-sizing: unset;
+        /* Tailwind's Preflight sets border-box [3, 9] */
+        border: unset;
+    }
+
+    .file-explorer dialog {
+        all: revert;
+    }
+
+
     /* Add outline to PDF pages */
     .pdfViewer .page .canvasWrapper {
         @apply outline outline-1 outline-[#c7c7c7];

@@ -17,7 +17,10 @@ export default defineConfig({
         oauth2: {
             client_id: process.env.GOOGLE_CLIENT_ID || "",
             scopes: [
-                "https://www.googleapis.com/auth/documents.readonly"
+                "https://www.googleapis.com/auth/documents.readonly",
+                "https://www.googleapis.com/auth/drive.readonly",
+                "https://www.googleapis.com/auth/drive.file",
+                "https://www.googleapis.com/auth/drive.metadata.readonly"
             ]
         },
         web_accessible_resources: [
