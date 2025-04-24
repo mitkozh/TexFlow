@@ -171,10 +171,16 @@ export class GoogleDocsAdapter implements EditorAdapter {
     }
 
     async uploadFile(documentId: string, file: File, parentFolderId: string): Promise<DriveFile> {
+        console.log('[GoogleDocsAdapter.uploadFile] called with', { documentId, file, parentFolderId });
         const token = await new Promise<string>((resolve, reject) => {
             chrome.identity.getAuthToken({ interactive: true }, (token) => {
-                if (chrome.runtime.lastError || !token) reject(chrome.runtime.lastError || 'No token');
-                else resolve(token);
+                if (chrome.runtime.lastError || !token) {
+                    console.error('[GoogleDocsAdapter.uploadFile] Failed to get token:', chrome.runtime.lastError);
+                    reject(chrome.runtime.lastError || 'No token');
+                } else {
+                    console.log('[GoogleDocsAdapter.uploadFile] Got token');
+                    resolve(token);
+                }
             });
         });
         const metadata = {
@@ -184,13 +190,21 @@ export class GoogleDocsAdapter implements EditorAdapter {
         const form = new FormData();
         form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
         form.append('file', file);
+        console.log('[GoogleDocsAdapter.uploadFile] Sending fetch to Google Drive API...');
         const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType', {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },
             body: form,
         });
-        if (!res.ok) throw new Error(await res.text());
-        return res.json();
+        console.log('[GoogleDocsAdapter.uploadFile] Fetch response status:', res.status);
+        if (!res.ok) {
+            const errorText = await res.text();
+            console.error('[GoogleDocsAdapter.uploadFile] Upload failed:', errorText);
+            throw new Error(errorText);
+        }
+        const json = await res.json();
+        console.log('[GoogleDocsAdapter.uploadFile] Upload succeeded:', json);
+        return json;
     }
 
     async uploadFileInChunks(documentId: string, file: File, parentFolderId: string, chunkSize = 5 * 1024 * 1024): Promise<DriveFile> {

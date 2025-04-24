@@ -22,6 +22,7 @@ interface PdfViewerProps {
   // New props for internal compilation
   mainFileContent?: string;
   fetchContent?: () => Promise<string>;
+  extraFiles?:Record<string, string | Uint8Array<ArrayBufferLike>>;
 }
 
 const PdfJsViewer: React.FC<PdfViewerProps> = (props) => {
@@ -33,11 +34,12 @@ const PdfJsViewer: React.FC<PdfViewerProps> = (props) => {
     error: externalError,
     mainFileContent,
     fetchContent,
+    extraFiles,
   } = props;
 
   // Use internal compilation if mainFileContent is provided
   const pdfCompilation = mainFileContent
-    ? usePdfCompilation({ mainFileContent, fetchContent })
+    ? usePdfCompilation({ mainFileContent, fetchContent, extraFiles })
     : null;
 
   const pdfUrl = pdfCompilation ? pdfCompilation.pdfUrl : externalPdfUrl ?? null;

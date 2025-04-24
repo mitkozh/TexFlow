@@ -3,8 +3,8 @@ import { useAsyncFn } from 'react-use'
 import { PdfTeXEngine } from '../latex/PdfTeXEngine'
 
 function toMap(
-  files: Map<string, string> | Record<string, string> | undefined,
-): Map<string, string> {
+  files: Map<string, string | Uint8Array> | Record<string, string | Uint8Array> | undefined,
+): Map<string, string | Uint8Array> {
   if (!files) return new Map()
   return files instanceof Map ? files : new Map(Object.entries(files))
 }
@@ -18,7 +18,7 @@ export function useCompile() {
     async (
       tex: string,
       mainFileName: string = 'main.tex',
-      extraFiles: Map<string, string> | Record<string, string> | undefined,
+      extraFiles: Record<string, string | Uint8Array<ArrayBufferLike>> | Map<string, string> | undefined, 
       engine?: PdfTeXEngine,
     ) => {
       if (!engine) return

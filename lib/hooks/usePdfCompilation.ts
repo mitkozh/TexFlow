@@ -6,7 +6,7 @@ interface UsePdfCompilationProps {
   mainFileContent: string | undefined;
   fetchContent?: () => Promise<string>;
   mainFileName?: string;
-  extraFiles?: Record<string, string>;
+  extraFiles?: Record<string, string | Uint8Array<ArrayBufferLike>>;
 }
 
 export function usePdfCompilation({
