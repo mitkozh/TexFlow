@@ -7,6 +7,7 @@ interface UsePdfCompilationProps {
   fetchContent?: () => Promise<string>;
   mainFileName?: string;
   extraFiles?: Record<string, string | Uint8Array<ArrayBufferLike>>;
+  disableRecompile?: boolean;
 }
 
 export function usePdfCompilation({
@@ -14,6 +15,7 @@ export function usePdfCompilation({
   fetchContent,
   mainFileName = 'main.tex',
   extraFiles,
+  disableRecompile,
 }: UsePdfCompilationProps) {
   const { engine, error: engineError } = useEngine('pdftex');
   const { compile, value: compileResult, error: compileError, loading: compiling } = useCompile();
@@ -22,7 +24,7 @@ export function usePdfCompilation({
 
   // Initial compile
   useEffect(() => {
-    if (mainFileContent && engine && !hasCompiled) {
+    if (mainFileContent && engine && !hasCompiled && !disableRecompile) {
       compile(mainFileContent, mainFileName, extraFiles, engine);
       setHasCompiled(true);
     }

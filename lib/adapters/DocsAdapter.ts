@@ -6,6 +6,9 @@ export interface DriveFile {
     id: string;
     name: string;
     mimeType: string;
+    size?: number;
+    createdTime?: string;
+    modifiedTime?: string;
 }
 
 export class GoogleDocsAdapter implements EditorAdapter {
@@ -18,7 +21,7 @@ export class GoogleDocsAdapter implements EditorAdapter {
                 return null;
             }
 
-            console.log('Tab URL:', tab.url);
+            // console.log('Tab URL:', tab.url);
             
             // Handle different Google Docs URL patterns
             const patterns = [
@@ -30,7 +33,7 @@ export class GoogleDocsAdapter implements EditorAdapter {
             for (const pattern of patterns) {
                 const match = tab.url.match(pattern);
                 if (match) {
-                    console.log('Found document ID:', match[1]);
+                    // console.log('Found document ID:', match[1]);
                     return match[1];
                 }
             }
@@ -139,7 +142,7 @@ export class GoogleDocsAdapter implements EditorAdapter {
         let envFolderId = await this.findOrCreateFolder(envFolderName, texflowFolderId, driveFetch);
         
         let q = `'${envFolderId}' in parents and trashed = false`;
-        let url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType)`;
+        let url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType,size,createdTime,modifiedTime)`;
         console.log('Listing files with URL:', url);
         let res = await driveFetch(url);
         console.log('Drive files:', JSON.stringify(res, null, 2));
@@ -165,8 +168,9 @@ export class GoogleDocsAdapter implements EditorAdapter {
             return res.json();
         };
         let q = `'${folderId}' in parents and trashed = false`;
-        let url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType)`;
+        let url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType,size,createdTime,modifiedTime)`;
         let res = await driveFetch(url);
+        console.log('Drive files in folder:', JSON.stringify(res, null, 2));
         return res.files || [];
     }
 

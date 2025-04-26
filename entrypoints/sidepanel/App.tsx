@@ -1,133 +1,90 @@
-import React, {useEffect, useRef, useState} from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import './App.module.css';
-import '../../assets/main.css'
-import Sidebar, {SidebarType} from "@/entrypoints/sidebar.tsx";
-import {browser} from "wxt/browser";
-import ExtMessage, {MessageType} from "@/entrypoints/types.ts";
-import {Button} from "@/components/ui/button.tsx";
-import {Card} from "@/components/ui/card.tsx";
-import {Home} from "@/entrypoints/sidepanel/home.tsx";
-import {SettingsPage} from "@/entrypoints/sidepanel/settings.tsx";
-import {useTheme} from "@/components/theme-provider.tsx";
-import {useTranslation} from 'react-i18next';
-import Header from "@/entrypoints/sidepanel/header.tsx";
-import { GoogleDocsAdapter, DriveFile } from "@/lib/adapters/DocsAdapter";
-import { FileExplorer } from "@/components/drive/FileExplorer";
+import '../../assets/main.css';
+import Sidebar, { SidebarType } from "@/entrypoints/sidebar.tsx";
+import { browser } from "wxt/browser";
+import { Button } from "@/components/ui/button.tsx";
+import { Card } from "@/components/ui/card.tsx";
+import { Home } from "@/entrypoints/sidepanel/home.tsx";
+import { SettingsPage } from "@/entrypoints/sidepanel/settings.tsx";
+import { useTheme } from "@/components/theme-provider.tsx";
+import { useTranslation } from 'react-i18next';
+import { GoogleDocsAdapter } from "@/lib/adapters/DocsAdapter";
+import { FileExplorer, FileExplorerHandle } from "@/components/drive/FileExplorer";
+import { DriveProvider } from "@/lib/contexts/DriveContext";
+import { DriveDataInitializer } from "@/components/drive/DriveDataInitializer";
 
 export default () => {
-    const [showButton, setShowButton] = useState(false)
-    const [showCard, setShowCard] = useState(false)
     const [sidebarType, setSidebarType] = useState<SidebarType>(SidebarType.home);
-    const [headTitle, setHeadTitle] = useState("home")
+    const [headTitle, setHeadTitle] = useState("home");
+    const [showButton, setShowButton] = useState(false);
+    const [showCard, setShowCard] = useState(false);
     const [buttonStyle, setButtonStyle] = useState<any>();
     const [cardStyle, setCardStyle] = useState<any>();
     const cardRef = useRef<HTMLDivElement>(null);
-    const {theme, toggleTheme} = useTheme();
-    const {t, i18n} = useTranslation();
-    const [driveFolderId, setDriveFolderId] = useState<string | null>(null);
-    const [driveFiles, setDriveFiles] = useState<DriveFile[]>([]);
-    const [driveLoading, setDriveLoading] = useState(false);
-    const [driveError, setDriveError] = useState<string | null>(null);
-    const [selectedFile, setSelectedFile] = useState<DriveFile | null>(null);
-    const [refreshKey, setRefreshKey] = useState(0);
+    const { theme, toggleTheme } = useTheme();
+    const { t, i18n } = useTranslation();
     const adapter = useRef(new GoogleDocsAdapter()).current;
-    const [docId, setDocId] = useState<string>("");
+    const fileExplorerRef = useRef<FileExplorerHandle>(null);
 
     useEffect(() => {
-        adapter.getDocumentId().then(id => setDocId(id || ""));
+        adapter.getDocumentId().then(id => {});
     }, [adapter]);
 
-    async function initI18n() {
-        let data = await browser.storage.local.get('i18n');
-        if (data.i18n) {
-            if (typeof data.i18n === 'string') {
-                await i18n.changeLanguage(data.i18n);
-            }
-        }
-    }
-
     useEffect(() => {
-        browser.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
-            console.log('sidepanel:')
-            console.log(message)
-            if (message.messageType == MessageType.changeLocale) {
-                i18n.changeLanguage(message.content)
-            } else if (message.messageType == MessageType.changeTheme) {
-                toggleTheme(message.content)
+        browser.runtime.onMessage.addListener((message: any) => {
+            if (message.messageType === 'changeLocale') {
+                i18n.changeLanguage(message.content);
+            } else if (message.messageType === 'changeTheme') {
+                toggleTheme(message.content);
             }
             return true;
         });
-
-        initI18n();
-    }, []);
-
-    // On startup, ensure Drive environment
-    useEffect(() => {
-        const setupDrive = async () => {
-            try {
-                const adapter = new GoogleDocsAdapter();
-                const docId = await adapter.getDocumentId();
-                if (docId) {
-                    const { folderId } = await adapter.ensureDriveEnvironment(docId);
-                    setDriveFolderId(folderId);
-                }
-            } catch (e: any) {
-                setDriveError(e.message || String(e));
+        browser.storage.local.get('i18n').then(data => {
+            if (data.i18n && typeof data.i18n === 'string') {
+                i18n.changeLanguage(data.i18n);
             }
-        };
-        setupDrive();
+        });
     }, []);
 
-    // When sidebarType is SidebarType.drive and folderId is set, list files
     useEffect(() => {
-        if (sidebarType === SidebarType.drive && driveFolderId) {
-            setDriveLoading(true);
-            setDriveError(null);
-            const adapter = new GoogleDocsAdapter();
-            adapter.getDocumentId().then(docId => {
-                if (docId) {
-                    adapter.listDriveFiles(docId)
-                        .then(setDriveFiles)
-                        .then(() => console.log(driveFiles))
-                        .catch(e => setDriveError(e.message || String(e)))
-                        .finally(() => setDriveLoading(false));
-                }
-            });
+        if (sidebarType === SidebarType.drive) {
+            setTimeout(() => {
+                fileExplorerRef.current?.refreshLayout();
+            }, 0);
         }
-    }, [sidebarType, driveFolderId]);
+    }, [sidebarType]);
 
     return (
         <div className={theme}>
-            {<div
-                className="fixed top-0 right-0 h-screen w-full bg-background z-[1000000000000] rounded-l-xl shadow-2xl">
-                {/* <Header headTitle={headTitle}/> */}
-                <Sidebar sideNav={(sidebarType: SidebarType) => {
-                    setSidebarType(sidebarType);
-                    setHeadTitle(sidebarType);
-                }} />
-                <main className="mr-14 grid gap-4 p-2 md:gap-8 h-full">
-                    {sidebarType === SidebarType.home && <Home/>}
-                    {sidebarType === SidebarType.settings && <SettingsPage/>}
-                    {sidebarType === SidebarType.drive && driveFolderId && docId && (
-                        <div className="flex h-full min-w-0 max-w-full">
+            <DriveProvider>
+                <DriveDataInitializer />
+                <div className="fixed top-0 right-0 h-screen w-full bg-background z-[1000000000000] rounded-l-xl shadow-2xl">
+                    <Sidebar sideNav={(type: SidebarType) => {
+                        setSidebarType(type);
+                        setHeadTitle(type);
+                    }} />
+                    <main className="mr-14 grid gap-4 p-2 md:gap-8 h-full">
+                        <div style={{ display: sidebarType === SidebarType.home ? 'block' : 'none', height: '100%' }}>
+                            <Home />
+                        </div>
+                        <div style={{ display: sidebarType === SidebarType.settings ? 'block' : 'none', height: '100%' }}>
+                            <SettingsPage />
+                        </div>
+                        <div style={{ display: sidebarType === SidebarType.drive ? 'block' : 'none', height: '100%' }} className="flex h-full min-w-0 max-w-full">
                             <div className="flex-1 h-full min-w-0 max-w-full">
-                                <FileExplorer
-                                />
+                                <FileExplorer ref={fileExplorerRef} />
                             </div>
                         </div>
-                    )}
-                </main>
-            </div>
-            }
-            {showButton &&
-                <Button className="absolute z-[100000]" style={buttonStyle}>send Message</Button>
-            }
-            {
+                    </main>
+                </div>
+                {showButton &&
+                    <Button className="absolute z-[100000]" style={buttonStyle}>send Message</Button>
+                }
                 <Card ref={cardRef}
-                      className={`absolute z-[100000] w-[300px] h-[200px] ${showCard ? 'block' : 'hidden'}`}
-                      style={cardStyle}></Card>
-            }
+                    className={`absolute z-[100000] w-[300px] h-[200px] ${showCard ? 'block' : 'hidden'}`}
+                    style={cardStyle}></Card>
+            </DriveProvider>
         </div>
-
-    )
+    );
 };
