@@ -6,23 +6,22 @@ import { usePdfViewerZoom } from '@/lib/hooks/usePdfViewerZoom';
 import { usePdfCompilation } from '@/lib/hooks/usePdfCompilation';
 import { PdfToolbar } from './PdfToolbar';
 
-// Set up the worker
 PDFJS.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.mjs',
   import.meta.url
 ).toString();
 
 interface PdfViewerProps {
-  // Existing props for backward compatibility
   pdfUrl?: string | null;
   onPageChange?: (page: number) => void;
   onRecompile?: () => void;
   compiling?: boolean;
   error?: string | null;
-  // New props for internal compilation
   mainFileContent?: string;
   fetchContent?: () => Promise<string>;
-  extraFiles?:Record<string, string | Uint8Array<ArrayBufferLike>>;
+  extraFiles?: Record<string, string | Uint8Array<ArrayBufferLike>>;
+  message?: string | null;
+  disableRecompile?: boolean;
 }
 
 const PdfJsViewer: React.FC<PdfViewerProps> = (props) => {
@@ -35,17 +34,17 @@ const PdfJsViewer: React.FC<PdfViewerProps> = (props) => {
     mainFileContent,
     fetchContent,
     extraFiles,
+    message,
+    disableRecompile,
   } = props;
 
-  // Use internal compilation if mainFileContent is provided
-  const pdfCompilation = mainFileContent
-    ? usePdfCompilation({ mainFileContent, fetchContent, extraFiles })
-    : null;
-
-  const pdfUrl = pdfCompilation ? pdfCompilation.pdfUrl : externalPdfUrl ?? null;
-  const compiling = pdfCompilation ? pdfCompilation.compiling : externalCompiling ?? false;
-  const compileError = pdfCompilation ? (pdfCompilation.compileError ? (typeof pdfCompilation.compileError === 'string' ? pdfCompilation.compileError : pdfCompilation.compileError.message) : null) : externalError ?? null;
-  const recompileFn = pdfCompilation ? pdfCompilation.recompile : externalOnRecompile;
+  const pdfCompilation = usePdfCompilation({ mainFileContent, fetchContent, extraFiles, disableRecompile });
+  const pdfUrl = mainFileContent ? pdfCompilation.pdfUrl : externalPdfUrl ?? null;
+  const compiling = mainFileContent ? pdfCompilation.compiling : externalCompiling ?? false;
+  const compileError = mainFileContent
+    ? (pdfCompilation.compileError ? (typeof pdfCompilation.compileError === 'string' ? pdfCompilation.compileError : pdfCompilation.compileError.message) : null)
+    : externalError ?? null;
+  const recompileFn = mainFileContent ? pdfCompilation.recompile : externalOnRecompile;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [pdfWrapper, setPdfWrapper] = useState<PDFJSWrapper | null>(null);
@@ -57,7 +56,6 @@ const PdfJsViewer: React.FC<PdfViewerProps> = (props) => {
   const handleScaleChange = (newScale: number | string) => {
     setScale(newScale);
     if (!pdfWrapper) return;
-
     if (typeof newScale === 'string' && ['auto', 'page-fit', 'page-width', 'page-height'].includes(newScale)) {
       pdfWrapper.viewer.currentScaleValue = newScale;
     } else {
@@ -70,20 +68,16 @@ const PdfJsViewer: React.FC<PdfViewerProps> = (props) => {
 
   usePdfViewerZoom(pdfWrapper, (newScale) => handleScaleChange(parseFloat(newScale)));
 
-  // Initialize PDF wrapper
   useEffect(() => {
     if (!containerRef.current) return;
-    
     const wrapper = new PDFJSWrapper(containerRef.current);
     setPdfWrapper(wrapper);
-
     return () => {
       wrapper.viewer.cleanup();
       setPdfWrapper(null);
     };
   }, [pdfUrl]);
 
-  // Reset state when PDF URL changes
   useEffect(() => {
     if (previousPdfUrl.current !== pdfUrl) {
       setNumPages(0);
@@ -92,32 +86,24 @@ const PdfJsViewer: React.FC<PdfViewerProps> = (props) => {
     }
   }, [pdfUrl]);
 
-  // Load PDF document
   useEffect(() => {
     if (!pdfWrapper || !pdfUrl) return;
-
     let isMounted = true;
     const loadingTask = pdfWrapper.loadDocument(pdfUrl);
-
     loadingTask.then((pdfDocument) => {
       if (isMounted && pdfDocument) {
         setNumPages(pdfDocument.numPages);
         pdfWrapper.viewer.currentPageNumber = 1;
       }
-    }).catch((error) => {
-      console.error('Failed to load PDF document:', error);
-    });
-
+    }).catch(() => {});
     return () => {
       isMounted = false;
       loadingTask.then((pdf) => pdf?.destroy());
     };
   }, [pdfWrapper, pdfUrl]);
 
-  // Set up event listeners
   useEffect(() => {
     if (!pdfWrapper) return;
-
     const handlers = {
       pagesInit: () => {
         if (typeof scale === 'string' && ['auto', 'page-fit', 'page-width', 'page-height'].includes(scale)) {
@@ -153,12 +139,10 @@ const PdfJsViewer: React.FC<PdfViewerProps> = (props) => {
         });
       }
     };
-
     pdfWrapper.eventBus.on('pagesinit', handlers.pagesInit);
     pdfWrapper.eventBus.on('pagechange', handlers.pageChange);
     pdfWrapper.eventBus.on('textlayerrendered', handlers.textLayerRendered);
     pdfWrapper.viewer.container.addEventListener('scroll', handlers.scroll);
-
     return () => {
       pdfWrapper.eventBus.off('pagesinit', handlers.pagesInit);
       pdfWrapper.eventBus.off('pagechange', handlers.pageChange);
@@ -167,16 +151,13 @@ const PdfJsViewer: React.FC<PdfViewerProps> = (props) => {
     };
   }, [pdfWrapper, externalOnPageChange, scale]);
 
-  // Handle container resizing
   useEffect(() => {
     const resizeObserver = new ResizeObserver(() => {
       pdfWrapper?.updateOnResize();
     });
-
     if (containerRef.current) {
       resizeObserver.observe(containerRef.current);
     }
-
     return () => {
       if (containerRef.current) {
         resizeObserver.unobserve(containerRef.current);
@@ -187,11 +168,17 @@ const PdfJsViewer: React.FC<PdfViewerProps> = (props) => {
   const handlePageChange = (newPage: number) => {
     if (pdfWrapper && newPage >= 1 && newPage <= numPages) {
       pdfWrapper.viewer.currentPageNumber = newPage;
-      // The existing 'pagechange' event listener will update the currentPage state
     }
   };
 
   const renderContent = () => {
+    if (message) {
+      return (
+        <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: "rgb(249, 251, 253)" }}>
+          <div className="text-gray-600">{message}</div>
+        </div>
+      );
+    }
     if (compileError) {
       return (
         <div className="flex-1 flex items-center justify-center bg-red-50 text-red-700 p-4 rounded-md">
@@ -199,7 +186,6 @@ const PdfJsViewer: React.FC<PdfViewerProps> = (props) => {
         </div>
       );
     }
-
     if (!pdfUrl) {
       return (
         <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: "rgb(249, 251, 253)" }}>
@@ -209,7 +195,6 @@ const PdfJsViewer: React.FC<PdfViewerProps> = (props) => {
         </div>
       );
     }
-
     return (
       <div className="flex-1 relative overflow-hidden border" style={{ backgroundColor: "rgb(249, 251, 253)" }}>
         <div className="overflow-hidden" tabIndex={-1}>
@@ -232,9 +217,9 @@ const PdfJsViewer: React.FC<PdfViewerProps> = (props) => {
         numPages={numPages}
         scale={scale}
         onScaleChange={handleScaleChange}
-        onPageChange={handlePageChange} // Pass the handler here
+        onPageChange={handlePageChange}
         onRecompile={recompileFn || (() => {})}
-        compiling={!!compiling}
+        compiling={!!compiling || !!disableRecompile}
       />
       {renderContent()}
     </div>

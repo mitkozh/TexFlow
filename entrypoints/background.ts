@@ -47,7 +47,7 @@ export default defineBackground(() => {
 
     // Main message handler
     browser.runtime.onMessage.addListener((message: any, sender, sendResponse: (message: any) => void) => {
-        console.log("background message received:", message);
+        // console.log("background message received:", message);
 
         // // Handle extension icon click event
         // if (message.messageType === MessageType.clickExtIcon) {
@@ -84,7 +84,7 @@ export default defineBackground(() => {
     function handleFetchDocumentContent(message: any, sendResponse: any) {
         // @ts-ignore - Chrome specific API
         browser.identity.getAuthToken({ interactive: true }, async (token: string) => {
-            console.log("OAuth token obtained:", token);
+            // console.log("OAuth token obtained:", token);
             if (!token) {
                 sendResponse({ error: "No OAuth token obtained." });
                 return;
