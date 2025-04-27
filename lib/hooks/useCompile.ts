@@ -28,6 +28,8 @@ export function useCompile() {
         await new Promise((resolve) => setTimeout(resolve, 100))
       }
       
+      //eurekaaaaaaaaa
+      engine.flushCache()
       // Write the main file and set it as the engine's main file.
       engine.writeMemFSFile(mainFileName, tex)
       engine.setEngineMainFile(mainFileName)
