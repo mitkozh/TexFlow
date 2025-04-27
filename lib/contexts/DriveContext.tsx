@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { GoogleDocsAdapter, DriveFile } from '@/lib/adapters/DocsAdapter';
+import { stringify } from 'node:querystring';
 
 export interface SyncfusionFileData {
     id: string;
@@ -103,10 +104,6 @@ export const DriveProvider: React.FC<DriveProviderProps> = ({ children }) => {
         return result;
     }, [adapter, mapDriveFileToSyncfusion]);
 
-    useEffect(() => {
-        console.log('Current fileData:', fileData);
-    }, [fileData]);
-
     const refreshFileData = useCallback(async () => {
         setLoading(true);
         setError(null);
@@ -135,7 +132,6 @@ export const DriveProvider: React.FC<DriveProviderProps> = ({ children }) => {
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);
             setError(errorMessage);
-            console.error('Failed to load Google Drive files:', errorMessage);
         } finally {
             setLoading(false);
         }
@@ -148,34 +144,36 @@ export const DriveProvider: React.FC<DriveProviderProps> = ({ children }) => {
             let driveFolderIdToRefresh: string | null = null;
             let parentFilterPath = '/';
             let parentNamePath = '';
-            let parentFolder: SyncfusionFileData | undefined = undefined;
             if (syncfusionFolderId === '0') {
                 driveFolderIdToRefresh = rootDriveFolderId;
                 parentFilterPath = '/';
                 parentNamePath = '';
             } else {
-                parentFolder = fileData.find(f => f.id === syncfusionFolderId && !f.isFile);
+                const parentFolder = fileData.find(f => f.id === syncfusionFolderId && !f.isFile);
                 if (!parentFolder || !parentFolder.originalID) return;
                 driveFolderIdToRefresh = parentFolder.originalID;
                 parentFilterPath = parentFolder.filterPath;
                 parentNamePath = parentFolder.namePath;
             }
             if (!driveFolderIdToRefresh) return;
-            const childrenDriveFiles = await adapter.listFilesInFolder(driveFolderIdToRefresh);
-            const childrenSyncfusionData: SyncfusionFileData[] = childrenDriveFiles.map(file =>
-                mapDriveFileToSyncfusion(file, syncfusionFolderId, parentFilterPath, parentNamePath)
-            );
+            const allDescendants = await fetchAndFlattenDriveFiles(driveFolderIdToRefresh, syncfusionFolderId, parentFilterPath, parentNamePath, false);
             setFileData(prev => {
-                const dataWithoutOldChildren = prev.filter(item =>
-                    item.parentId !== syncfusionFolderId &&
-                    !(item.id && item.id.startsWith('temp-upload-') && item.parentId === syncfusionFolderId) &&
-                    item.id !== syncfusionFolderId
-                );
-                const parentFolder = prev.find(item => item.id === syncfusionFolderId);
-                const newData = parentFolder ? [...dataWithoutOldChildren, parentFolder, ...childrenSyncfusionData] : [...dataWithoutOldChildren, ...childrenSyncfusionData];
-                const parentFolderIndex = newData.findIndex(item => item.id === syncfusionFolderId);
-                if (parentFolderIndex > -1) {
-                    newData[parentFolderIndex].hasChild = childrenSyncfusionData.length > 0;
+                const dataWithoutOldDescendants = prev.filter(item => {
+                    if (item.id === syncfusionFolderId) return true;
+                    let ancestor = item.parentId;
+                    while (ancestor) {
+                        if (ancestor === syncfusionFolderId) return false;
+                        ancestor = prev.find(f => f.id === ancestor)?.parentId || null;
+                    }
+                    return true;
+                });
+                const parentFolderEntry = prev.find(item => item.id === syncfusionFolderId);
+                let newData;
+                if (parentFolderEntry) {
+                    parentFolderEntry.hasChild = allDescendants.some(f => f.parentId === syncfusionFolderId);
+                    newData = [...dataWithoutOldDescendants.filter(f => f.id !== syncfusionFolderId), parentFolderEntry, ...allDescendants];
+                } else {
+                    newData = [...dataWithoutOldDescendants, ...allDescendants];
                 }
                 const uniqueData = Array.from(new Map(newData.map(item => [item.id, item])).values());
                 return uniqueData;
@@ -183,11 +181,10 @@ export const DriveProvider: React.FC<DriveProviderProps> = ({ children }) => {
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);
             setError(errorMessage);
-            console.error('Failed to refresh folder contents:', errorMessage);
         } finally {
             setLoading(false);
         }
-    }, [adapter, fileData, rootDriveFolderId, mapDriveFileToSyncfusion]);
+    }, [adapter, fileData, rootDriveFolderId, mapDriveFileToSyncfusion, fetchAndFlattenDriveFiles]);
 
     const uploadFile = useCallback(async (file: File, parentSyncfusionId: string) => {
         if (!docId) throw new Error('Document ID not available');
@@ -237,6 +234,24 @@ export const DriveProvider: React.FC<DriveProviderProps> = ({ children }) => {
         try {
             await adapter.uploadFileInChunks(docId, file, parentFolderDriveId);
             await refreshFolder(parentSyncfusionId);
+            const parent = fileData.find(f => f.id === parentSyncfusionId);
+            const parentNamePath = parent ? parent.namePath : '';
+            const namePath = parentNamePath ? `${parentNamePath}/${file.name}` : file.name;
+            const newFile = fileData.find(f => f.namePath === namePath && f.isFile);
+            if (newFile && newFile.originalID) {
+                let content = await adapter.fetchFileContent(newFile.originalID, newFile.type);
+                let entry: { content: string | Uint8Array, dateModified: number };
+                const fileDate = newFile.dateModified instanceof Date ? newFile.dateModified.getTime() : new Date(newFile.dateModified).getTime();
+                if (typeof content === 'string') {
+                    entry = { content, dateModified: fileDate };
+                } else if (content instanceof Blob) {
+                    const arrayBuffer = await content.arrayBuffer();
+                    entry = { content: new Uint8Array(arrayBuffer), dateModified: fileDate };
+                } else {
+                    entry = { content: '', dateModified: fileDate };
+                }
+                await idbPutFileContent(docId, newFile.namePath, entry);
+            }
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);
             setError(errorMessage);
@@ -328,6 +343,7 @@ export const DriveProvider: React.FC<DriveProviderProps> = ({ children }) => {
         });
         try {
             await adapter.deleteFileOrFolder(itemToDelete.originalID);
+            await idbDeleteFileContent(docId, itemToDelete.namePath);
             if (parentId) {
                 await refreshFolder(parentId);
             }
@@ -338,7 +354,7 @@ export const DriveProvider: React.FC<DriveProviderProps> = ({ children }) => {
         } finally {
             setLoading(false);
         }
-    }, [adapter, fileData, refreshFolder]);
+    }, [adapter, fileData, refreshFolder, docId]);
 
     const renameFileOrFolder = useCallback(async (itemId: string, newName: string) => {
         setLoading(true);
@@ -350,9 +366,10 @@ export const DriveProvider: React.FC<DriveProviderProps> = ({ children }) => {
             return;
         }
         const parentId = itemToRename.parentId;
+        const oldNamePath = itemToRename.namePath;
         const prevFileData = fileData;
-        setFileData(prev => prev.map(f => f.id === itemId ? { ...f, name: newName } : f));
         try {
+            await idbDeleteFileContent(docId, oldNamePath);
             await adapter.renameFileOrFolder(itemToRename.originalID, newName);
             if (parentId) {
                 await refreshFolder(parentId);
@@ -364,7 +381,7 @@ export const DriveProvider: React.FC<DriveProviderProps> = ({ children }) => {
         } finally {
             setLoading(false);
         }
-    }, [adapter, fileData, refreshFolder]);
+    }, [adapter, fileData, refreshFolder, docId]);
 
     const moveFileOrFolder = useCallback(async (itemId: string, targetFolderId: string) => {
         setLoading(true);
@@ -379,6 +396,7 @@ export const DriveProvider: React.FC<DriveProviderProps> = ({ children }) => {
         const sourceParentId = itemToMove.parentId;
         const prevFileData = fileData;
         try {
+            await idbDeleteFileContent(docId, itemToMove.namePath);
             if (sourceParentId) {
                 const sourceParent = fileData.find(f => f.id === sourceParentId);
                 if (sourceParent && sourceParent.originalID) {
@@ -394,7 +412,7 @@ export const DriveProvider: React.FC<DriveProviderProps> = ({ children }) => {
         } finally {
             setLoading(false);
         }
-    }, [adapter, fileData, refreshFolder]);
+    }, [adapter, fileData, refreshFolder, docId]);
 
     const copyFileOrFolder = useCallback(async (itemId: string, targetFolderId: string, newName?: string) => {
         setLoading(true);
@@ -419,7 +437,7 @@ export const DriveProvider: React.FC<DriveProviderProps> = ({ children }) => {
         } finally {
             setLoading(false);
         }
-    }, [adapter, fileData, refreshFolder]);
+    }, [adapter, fileData, refreshFolder, docId]);
 
     const downloadFileOrFolder = useCallback(async (itemId: string) => {
         setLoading(true);
@@ -440,6 +458,63 @@ export const DriveProvider: React.FC<DriveProviderProps> = ({ children }) => {
         }
     }, [adapter, fileData]);
 
+    // IndexedDB helpers for filesWithContent persistent cache
+    function getFilesDBName(docId: string | null) {
+        return docId ? `drive-files-cache-${docId}` : 'drive-files-cache-unknown';
+    }
+
+    function openFilesDB(docId: string | null): Promise<IDBDatabase> {
+        return new Promise((resolve, reject) => {
+            const dbName = getFilesDBName(docId);
+            const request = indexedDB.open(dbName, 1);
+            request.onupgradeneeded = function () {
+                const db = request.result;
+                if (!db.objectStoreNames.contains('files')) {
+                    db.createObjectStore('files');
+                }
+            };
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async function idbGetFileContent(docId: string | null, key: string): Promise<{ content: string | Uint8Array, dateModified: number } | undefined> {
+        const db = await openFilesDB(docId);
+        return new Promise((resolve) => {
+            const tx = db.transaction('files', 'readonly');
+            const store = tx.objectStore('files');
+            const req = store.get(key);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => resolve(undefined);
+        });
+    }
+
+    async function idbPutFileContent(docId: string | null, key: string, value: { content: string | Uint8Array, dateModified: number }) {
+        const db = await openFilesDB(docId);
+        return new Promise<void>((resolve, reject) => {
+            const tx = db.transaction('files', 'readwrite');
+            const store = tx.objectStore('files');
+            const req = store.put(value, key);
+            req.onsuccess = () => resolve();
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    async function idbDeleteFileContent(docId: string | null, key: string) {
+        const db = await openFilesDB(docId);
+        return new Promise<void>((resolve, reject) => {
+            const tx = db.transaction('files', 'readwrite');
+            const store = tx.objectStore('files');
+            const req = store.delete(key);
+            req.onsuccess = () => { 
+                resolve(); 
+            };
+            req.onerror = () => { 
+                reject(req.error); 
+            };
+        });
+    }
+
     useEffect(() => {
         let cancelled = false;
         async function fetchAllContents() {
@@ -450,19 +525,26 @@ export const DriveProvider: React.FC<DriveProviderProps> = ({ children }) => {
                 for (const file of fileData) {
                     if (file.isFile && file.originalID) {
                         try {
-                            const cacheEntry = filesWithContent[file.namePath] as { content: string | Uint8Array, dateModified: number } | undefined;
                             const fileDate = file.dateModified instanceof Date ? file.dateModified.getTime() : new Date(file.dateModified).getTime();
-                            if (cacheEntry && cacheEntry.dateModified === fileDate) {
-                                fileMap[file.namePath] = cacheEntry;
-                                continue;
+                            const cached = await idbGetFileContent(docId, file.namePath);
+                            if (cached) {
+                                if (cached.dateModified === fileDate) {
+                                    fileMap[file.namePath] = cached;
+                                    continue;
+                                }
                             }
                             let content = await adapter.fetchFileContent(file.originalID, file.type);
+                            let entry: { content: string | Uint8Array, dateModified: number };
                             if (typeof content === 'string') {
-                                fileMap[file.namePath] = { content, dateModified: fileDate };
+                                entry = { content, dateModified: fileDate };
                             } else if (content instanceof Blob) {
                                 const arrayBuffer = await content.arrayBuffer();
-                                fileMap[file.namePath] = { content: new Uint8Array(arrayBuffer), dateModified: fileDate };
+                                entry = { content: new Uint8Array(arrayBuffer), dateModified: fileDate };
+                            } else {
+                                continue;
                             }
+                            fileMap[file.namePath] = entry;
+                            await idbPutFileContent(docId, file.namePath, entry);
                         } catch (e) {
                             // Ignore errors for individual files
                         }
@@ -475,9 +557,11 @@ export const DriveProvider: React.FC<DriveProviderProps> = ({ children }) => {
                 if (!cancelled) setFilesWithContentLoading(false);
             }
         }
-        fetchAllContents();
+        if (!loading && fileData.length > 0) {
+            fetchAllContents();
+        }
         return () => { cancelled = true; };
-    }, [fileData, adapter]);
+    }, [fileData, adapter, docId, loading]);
 
     const contextValue: DriveContextProps = {
         fileData,
