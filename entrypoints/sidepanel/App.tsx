@@ -26,7 +26,7 @@ export default () => {
     const { t, i18n } = useTranslation();
     const adapter = useRef(new GoogleDocsAdapter()).current;
     const fileExplorerRef = useRef<FileExplorerHandle>(null);
-
+    const [documentId, setDocumentId] = useState<string | null>(null);
 
     useEffect(() => {
         browser.runtime.onMessage.addListener((message: any) => {
@@ -34,6 +34,12 @@ export default () => {
                 i18n.changeLanguage(message.content);
             } else if (message.messageType === 'changeTheme') {
                 toggleTheme(message.content);
+            } else if (message.messageType === 'tabUrlChanged') {
+                // Refetch documentId when tab URL changes
+                adapter.getDocumentId().then((docId) => {
+                    setDocumentId(docId);
+                    console.log("docId (url changed)", docId);
+                });
             }
             return true;
         });
@@ -45,6 +51,12 @@ export default () => {
     }, []);
 
     useEffect(() => {
+        adapter.getDocumentId().then((docId => {
+            setDocumentId(docId)
+        }));
+    }, [adapter]);
+
+    useEffect(() => {
         if (sidebarType === SidebarType.drive) {
             setTimeout(() => {
                 fileExplorerRef.current?.refreshLayout();
@@ -52,9 +64,16 @@ export default () => {
         }
     }, [sidebarType]);
 
+    useEffect(() => {
+        if (documentId) {
+            setSidebarType(SidebarType.home);
+            setHeadTitle("home");
+        }
+    }, [documentId]);
+
     return (
         <div className={theme}>
-            <DriveProvider>
+            <DriveProvider key={documentId}>
                 <DriveDataInitializer />
                 <div className="fixed top-0 right-0 h-screen w-full bg-background z-[1000000000000] rounded-l-xl shadow-2xl">
                     <Sidebar sideNav={(type: SidebarType) => {
@@ -63,14 +82,14 @@ export default () => {
                     }} />
                     <main className="mr-14 grid gap-4 p-2 md:gap-8 h-full">
                         <div style={{ display: sidebarType === SidebarType.home ? 'block' : 'none', height: '100%' }}>
-                            <Home />
+                            {documentId && <Home />}
                         </div>
                         <div style={{ display: sidebarType === SidebarType.settings ? 'block' : 'none', height: '100%' }}>
                             <SettingsPage />
                         </div>
                         <div style={{ display: sidebarType === SidebarType.drive ? 'block' : 'none', height: '100%' }} className="flex h-full min-w-0 max-w-full">
                             <div className="flex-1 h-full min-w-0 max-w-full">
-                                <FileExplorer ref={fileExplorerRef} />
+                                {documentId && <FileExplorer ref={fileExplorerRef} />}
                             </div>
                         </div>
                     </main>

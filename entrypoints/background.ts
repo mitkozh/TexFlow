@@ -6,6 +6,36 @@ export default defineBackground(() => {
 
     // @ts-ignore
     browser.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+
+    // On extension startup, set side panel state for all open tabs
+    (async function setSidePanelForAllTabs() {
+        const tabs = await browser.tabs.query({});
+        for (const tab of tabs) {
+            if (!tab.url || !tab.id) continue;
+            try {
+                const url = new URL(tab.url);
+                if (
+                    url.hostname === 'docs.google.com' &&
+                    url.pathname.startsWith('/document/d/')
+                ) {
+                    // @ts-ignore
+                    await browser.sidePanel.setOptions({
+                        tabId: tab.id,
+                        path: 'sidepanel.html',
+                        enabled: true
+                    });
+                } else {
+                    // @ts-ignore
+                    await browser.sidePanel.setOptions({
+                        enabled: false
+                    });
+                }
+            } catch (e) {
+                // Ignore invalid URLs
+            }
+        }
+    })();
+
     // Only enable side panel on Google Docs document pages
     browser.tabs.onUpdated.addListener(async (tabId, info, tab) => {
         if (!tab.url) {
@@ -24,10 +54,12 @@ export default defineBackground(() => {
                     path: 'sidepanel.html',
                     enabled: true
                 });
+                // Send message to sidepanel to refetch documentId
+                await browser.runtime.sendMessage({ messageType: 'tabUrlChanged' });
             } else {
                 // @ts-ignore
                 await browser.sidePanel.setOptions({
-                    // tabId,
+                    tabId,
                     enabled: false
                 });
             }
