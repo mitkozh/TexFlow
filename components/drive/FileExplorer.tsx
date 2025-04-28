@@ -4,6 +4,9 @@ import './FileExplorer.css';
 import JSZip from 'jszip';
 import { useDrive, SyncfusionFileData } from '@/lib/contexts/DriveContext';
 import { DriveFile } from '@/lib/adapters/DocsAdapter';
+import { FileManager, MenuClickEventArgs, MenuOpenEventArgs } from '@syncfusion/ej2-filemanager';
+
+FileManager.Inject(Toolbar, NavigationPane, DetailsView);
 
 export interface FileExplorerHandle {
     refreshLayout: () => void;
@@ -244,6 +247,28 @@ export const FileExplorer = React.forwardRef<FileExplorerHandle>((props, ref) =>
         }
     };
 
+    const handleMenuOpen = (args: any) => {
+        for (let i = 0; i < args.items.length; i++) {
+            if (args.items[i].text === 'Copy Path') {
+                args.items[i].iconCss = 'e-icons e-fe-copy';
+            }
+        }
+    };
+
+    const handleMenuClick = (args: any) => {
+        if (args.item && args.item.text === 'Copy Path') {
+            const selected = args.fileDetails || args.folderDetails;
+            let item = null;
+            if (selected && selected.length > 0) {
+                item = fileData.find(f => f.id === selected[0].id);
+            }
+            if (item) {
+                const relPath = item.namePath;
+                navigator.clipboard.writeText(relPath);
+            }
+        }
+    };
+
     const syncfusionFileSystemData = useMemo(() => {
         return fileData.map(item => ({ ...item } as SyncfusionFileData & { [key: string]: any }));
     }, [fileData]);
@@ -266,11 +291,21 @@ export const FileExplorer = React.forwardRef<FileExplorerHandle>((props, ref) =>
                             view="Details"
                             allowDragAndDrop={true}
                             contextMenuSettings={{
-                                file: ['Cut', 'Copy', '|', 'Delete', 'Download', 'Rename', '|', 'Details'],
-                                folder: ['Open', '|', 'Cut', 'Copy', 'Paste', '|', 'Delete', 'Rename', '|', 'Details'],
-                                layout: ['SortBy', 'View', 'Refresh', '|', 'Paste', '|', 'NewFolder', '|', 'Details', '|', 'SelectAll'],
+                                file: [
+                                    'Copy Path',
+                                    'Cut', 'Copy', '|', 'Delete', 'Download', 'Rename'
+                                ],
+                                folder: [
+                                    'Copy Path',
+                                    'Open', '|', 'Cut', 'Copy', 'Paste', '|', 'Delete', 'Rename',
+                                ],
+                                layout: [
+                                    'SortBy', 'View', 'Refresh', '|', 'Paste', '|', 'NewFolder', '|', 'SelectAll'
+                                ],
                                 visible: true
                             }}
+                            menuOpen={handleMenuOpen}
+                            menuClick={handleMenuClick}
                             navigationPaneSettings={{ visible: true }}
                             uploadListCreate={handleUploadListCreate}
                             beforeDelete={handleBeforeDelete}
