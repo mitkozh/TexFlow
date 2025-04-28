@@ -35,6 +35,8 @@ export function usePdfViewerZoom(
       const currentMouseX = event.clientX - containerRect.left;
       const currentMouseY = event.clientY - containerRect.top;
 
+      pdfJsWrapper.viewer.update();
+
       pdfJsWrapper.viewer.container.scrollBy({
         left: currentMouseX * exactScaleFactor - currentMouseX,
         top: currentMouseY * exactScaleFactor - currentMouseY,

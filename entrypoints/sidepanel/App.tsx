@@ -27,9 +27,6 @@ export default () => {
     const adapter = useRef(new GoogleDocsAdapter()).current;
     const fileExplorerRef = useRef<FileExplorerHandle>(null);
 
-    useEffect(() => {
-        adapter.getDocumentId().then(id => {});
-    }, [adapter]);
 
     useEffect(() => {
         browser.runtime.onMessage.addListener((message: any) => {

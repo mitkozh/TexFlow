@@ -24,6 +24,7 @@ export class PDFJSWrapper {
     this.viewer = new PdfJsPDFViewer({
       container,
       eventBus: this.eventBus,
+      maxCanvasPixels: 67108864,
       linkService: this.linkService,
       annotationMode: PDFJS.AnnotationMode.ENABLE,
       annotationEditorMode: PDFJS.AnnotationEditorType.DISABLE,
@@ -38,7 +39,7 @@ export class PDFJSWrapper {
     try {
       const doc = await PDFJS.getDocument({
         url,
-        disableFontFace: true,
+        // disableFontFace: true,
         disableAutoFetch: true,
         disableStream: true,
         isEvalSupported: false,
