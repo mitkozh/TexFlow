@@ -1,6 +1,6 @@
 import { MessageType } from "@/entrypoints/types";
 import { EditorAdapter } from "./EditorAdapter";
-
+import { fetchDrive } from '@/lib/utils/fetchDrive';
 
 export interface DriveFile {
     id: string;
@@ -118,29 +118,24 @@ export class GoogleDocsAdapter implements EditorAdapter {
         return createRes.id;
     }
 
-    async listDriveFiles(documentId: string): Promise<DriveFile[]> {
-        const token = await new Promise<string>((resolve, reject) => {
+    private getToken = async () => {
+        return await new Promise<string>((resolve, reject) => {
             chrome.identity.getAuthToken({ interactive: true }, (token) => {
                 if (chrome.runtime.lastError || !token) reject(chrome.runtime.lastError || 'No token');
                 else resolve(token);
             });
         });
+    };
+
+    async listDriveFiles(documentId: string): Promise<DriveFile[]> {
+        const getToken = this.getToken;
         // Find the environment folder
         const driveFetch = async (url: string, options: any = {}) => {
-            const res = await fetch(url, {
-                ...options,
-                headers: {
-                    ...(options.headers || {}),
-                    Authorization: `Bearer ${token}`,
-                },
-            });
-            if (!res.ok) throw new Error(await res.text());
-            return res.json();
+            return await fetchDrive(getToken, url, options);
         };
         let texflowFolderId = await this.findOrCreateFolder('TexFlow', null, driveFetch);
         let envFolderName = `TexFlow-${documentId}`;
         let envFolderId = await this.findOrCreateFolder(envFolderName, texflowFolderId, driveFetch);
-        
         let q = `'${envFolderId}' in parents and trashed = false`;
         let url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType,size,createdTime,modifiedTime)`;
         console.log('Listing files with URL:', url);
@@ -150,22 +145,9 @@ export class GoogleDocsAdapter implements EditorAdapter {
     }
 
     async listFilesInFolder(folderId: string): Promise<DriveFile[]> {
-        const token = await new Promise<string>((resolve, reject) => {
-            chrome.identity.getAuthToken({ interactive: true }, (token) => {
-                if (chrome.runtime.lastError || !token) reject(chrome.runtime.lastError || 'No token');
-                else resolve(token);
-            });
-        });
+        const getToken = this.getToken;
         const driveFetch = async (url: string, options: any = {}) => {
-            const res = await fetch(url, {
-                ...options,
-                headers: {
-                    ...(options.headers || {}),
-                    Authorization: `Bearer ${token}`,
-                },
-            });
-            if (!res.ok) throw new Error(await res.text());
-            return res.json();
+            return await fetchDrive(getToken, url, options);
         };
         let q = `'${folderId}' in parents and trashed = false`;
         let url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType,size,createdTime,modifiedTime)`;
@@ -269,46 +251,26 @@ export class GoogleDocsAdapter implements EditorAdapter {
 
     // Create a folder in Google Drive (wrapper for use in UI)
     async createFolder(name: string, parentId: string): Promise<string> {
-        const token = await new Promise<string>((resolve, reject) => {
-            chrome.identity.getAuthToken({ interactive: true }, (token) => {
-                if (chrome.runtime.lastError || !token) reject(chrome.runtime.lastError || 'No token');
-                else resolve(token);
-            });
-        });
+        const getToken = this.getToken;
         const body = {
             name,
             mimeType: 'application/vnd.google-apps.folder',
             parents: [parentId],
         };
-        const res = await fetch('https://www.googleapis.com/drive/v3/files', {
+        const res = await fetchDrive(getToken, 'https://www.googleapis.com/drive/v3/files', {
             method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
         });
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
-        return data.id;
+        return res.id;
     }
 
     // Delete a file or folder in Google Drive
     async deleteFileOrFolder(fileId: string): Promise<void> {
-        const token = await new Promise<string>((resolve, reject) => {
-            chrome.identity.getAuthToken({ interactive: true }, (token) => {
-                if (chrome.runtime.lastError || !token) reject(chrome.runtime.lastError || 'No token');
-                else resolve(token);
-            });
-        });
-        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+        const getToken = this.getToken;
+        await fetchDrive(getToken, `https://www.googleapis.com/drive/v3/files/${fileId}`, {
             method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-            },
         });
-        console.log(res)
-        if (!res.ok && res.status !== 204) throw new Error(await res.text());
     }
 
     async fetchFileContent(fileId: string, mimeType: string): Promise<Blob | string> {
@@ -331,22 +293,12 @@ export class GoogleDocsAdapter implements EditorAdapter {
     }
 
     async renameFile(fileId: string, newName: string): Promise<DriveFile> {
-        const token = await new Promise<string>((resolve, reject) => {
-            chrome.identity.getAuthToken({ interactive: true }, (token) => {
-                if (chrome.runtime.lastError || !token) reject(chrome.runtime.lastError || 'No token');
-                else resolve(token);
-            });
-        });
-        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+        const getToken = this.getToken;
+        return await fetchDrive(getToken, `https://www.googleapis.com/drive/v3/files/${fileId}`, {
             method: 'PATCH',
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: newName }),
         });
-        if (!res.ok) throw new Error(await res.text());
-        return res.json();
     }
 
     async downloadFile(fileId: string): Promise<Blob> {
@@ -399,44 +351,23 @@ export class GoogleDocsAdapter implements EditorAdapter {
 
     // Copy a file (not folder) in Google Drive
     async copyFileOrFolder(fileId: string, newName: string, parentId: string): Promise<DriveFile> {
-        const token = await new Promise<string>((resolve, reject) => {
-            chrome.identity.getAuthToken({ interactive: true }, (token) => {
-                if (chrome.runtime.lastError || !token) reject(chrome.runtime.lastError || 'No token');
-                else resolve(token);
-            });
-        });
-        // Only files can be copied via Drive API; for folders, you must create a new folder and recursively copy contents (not implemented here)
-        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/copy`, {
+        const getToken = this.getToken;
+        return await fetchDrive(getToken, `https://www.googleapis.com/drive/v3/files/${fileId}/copy`, {
             method: 'POST',
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 name: newName,
                 parents: [parentId],
             }),
         });
-        if (!res.ok) throw new Error(await res.text());
-        return res.json();
     }
 
     // Move a file or folder in Google Drive
     async moveFileOrFolder(fileId: string, newParentId: string, oldParentId: string): Promise<DriveFile> {
-        const token = await new Promise<string>((resolve, reject) => {
-            chrome.identity.getAuthToken({ interactive: true }, (token) => {
-                if (chrome.runtime.lastError || !token) reject(chrome.runtime.lastError || 'No token');
-                else resolve(token);
-            });
-        });
-        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?addParents=${newParentId}&removeParents=${oldParentId}&fields=id,name,parents`, {
+        const getToken = this.getToken;
+        return await fetchDrive(getToken, `https://www.googleapis.com/drive/v3/files/${fileId}?addParents=${newParentId}&removeParents=${oldParentId}&fields=id,name,parents`, {
             method: 'PATCH',
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
         });
-        if (!res.ok) throw new Error(await res.text());
-        return res.json();
     }
 }

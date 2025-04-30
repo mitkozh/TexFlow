@@ -48,9 +48,10 @@ export const useDrive = (): DriveContextProps => {
 
 interface DriveProviderProps {
     children: ReactNode;
+    adapter: GoogleDocsAdapter;
 }
 
-export const DriveProvider: React.FC<DriveProviderProps> = ({ children }) => {
+export const DriveProvider: React.FC<DriveProviderProps> = ({ children, adapter }) => {
     const [fileData, setFileData] = useState<SyncfusionFileData[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -58,7 +59,6 @@ export const DriveProvider: React.FC<DriveProviderProps> = ({ children }) => {
     const [docId, setDocId] = useState<string | null>(null);
     const [filesWithContent, setFilesWithContent] = useState<Record<string, { content: string | Uint8Array, dateModified: number }>>({});
     const [filesWithContentLoading, setFilesWithContentLoading] = useState(true);
-    const adapter = React.useMemo(() => new GoogleDocsAdapter(), []);
 
     const mapDriveFileToSyncfusion = useCallback((file: DriveFile, parentSyncfusionId: string | null, parentFilterPath: string, parentNamePath: string): SyncfusionFileData => {
         const isFolder = file.mimeType === 'application/vnd.google-apps.folder';

@@ -4,9 +4,11 @@ import { GoogleDocsAdapter } from '@/lib/adapters/DocsAdapter';
 import PdfViewer from '@/components/pdf/PdfViewer';
 import { useDrive } from '@/lib/contexts/DriveContext';
 
-const adapter = new GoogleDocsAdapter();
+interface HomeProps {
+  adapter: GoogleDocsAdapter;
+}
 
-export function Home() {
+export function Home({ adapter }: HomeProps) {
   const { content, error: contentError, loading: contentLoading, refetch } = useDocumentContent(adapter);
   const {
     fileData,
@@ -26,7 +28,6 @@ export function Home() {
   } else if (filesWithContentLoading && Object.keys(filesWithContent).length === 0) {
     viewerMessage = 'Loading Drive files...';
   }
-
 
   return (
     <PdfViewer

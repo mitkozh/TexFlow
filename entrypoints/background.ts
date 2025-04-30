@@ -1,5 +1,7 @@
 import { browser } from "wxt/browser";
 import ExtMessage, { MessageFrom, MessageType } from "@/entrypoints/types.ts";
+import { fetchDrive } from '@/lib/utils/fetchDrive';
+import { getAuthToken } from '@/lib/utils/auth';
 
 export default defineBackground(() => {
     console.log('Hello background!', { id: browser.runtime.id });
@@ -114,34 +116,15 @@ export default defineBackground(() => {
 
     // Helper function to handle document content fetching
     function handleFetchDocumentContent(message: any, sendResponse: any) {
-        // @ts-ignore - Chrome specific API
-        browser.identity.getAuthToken({ interactive: true }, async (token: string) => {
-            // console.log("OAuth token obtained:", token);
-            if (!token) {
-                sendResponse({ error: "No OAuth token obtained." });
-                return;
-            }
-
+        // getToken for background context
+        (async () => {
             try {
-                const response = await fetch(
+                const token = await getAuthToken();
+                const doc = await fetchDrive<any>(
+                    () => Promise.resolve(token),
                     `https://docs.googleapis.com/v1/documents/${message.documentId}`,
-                    {
-                        headers: {
-                            Authorization: `Bearer ${token}`,
-                            "Content-Type": "application/json",
-                        },
-                    }
+                    { headers: { 'Content-Type': 'application/json' } }
                 );
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    sendResponse({
-                        error: "Error fetching document: " + errorData.error.message,
-                    });
-                    return;
-                }
-
-                const doc = await response.json();
                 let text = "";
                 if (doc.body && doc.body.content) {
                     doc.body.content.forEach((element: any) => {
@@ -158,6 +141,6 @@ export default defineBackground(() => {
             } catch (err: any) {
                 sendResponse({ error: err.message || String(err) });
             }
-        });
+        })();
     }
 });

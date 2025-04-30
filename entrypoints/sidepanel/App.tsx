@@ -29,13 +29,18 @@ export default () => {
     const [documentId, setDocumentId] = useState<string | null>(null);
 
     useEffect(() => {
+        adapter.getDocumentId().then((docId => {
+            setDocumentId(docId)
+        }));
+    }, [adapter]);
+
+    useEffect(() => {
         browser.runtime.onMessage.addListener((message: any) => {
             if (message.messageType === 'changeLocale') {
                 i18n.changeLanguage(message.content);
             } else if (message.messageType === 'changeTheme') {
                 toggleTheme(message.content);
             } else if (message.messageType === 'tabUrlChanged') {
-                // Refetch documentId when tab URL changes
                 adapter.getDocumentId().then((docId) => {
                     setDocumentId(docId);
                     console.log("docId (url changed)", docId);
@@ -48,13 +53,7 @@ export default () => {
                 i18n.changeLanguage(data.i18n);
             }
         });
-    }, []);
-
-    useEffect(() => {
-        adapter.getDocumentId().then((docId => {
-            setDocumentId(docId)
-        }));
-    }, [adapter]);
+    }, [adapter, i18n, toggleTheme]);
 
     useEffect(() => {
         if (sidebarType === SidebarType.drive) {
@@ -73,7 +72,7 @@ export default () => {
 
     return (
         <div className={theme}>
-            <DriveProvider key={documentId}>
+            <DriveProvider key={documentId} adapter={adapter}>
                 <DriveDataInitializer />
                 <div className="fixed top-0 right-0 h-screen w-full bg-background z-[1000000000000] rounded-l-xl shadow-2xl">
                     <Sidebar sideNav={(type: SidebarType) => {
@@ -82,7 +81,7 @@ export default () => {
                     }} />
                     <main className="mr-14 grid gap-4 p-2 md:gap-8 h-full">
                         <div style={{ display: sidebarType === SidebarType.home ? 'block' : 'none', height: '100%' }}>
-                            {documentId && <Home />}
+                            {documentId && <Home adapter={adapter} />}
                         </div>
                         <div style={{ display: sidebarType === SidebarType.settings ? 'block' : 'none', height: '100%' }}>
                             <SettingsPage />

@@ -1,9 +1,8 @@
-import React, {useEffect, useState} from "react";
+import React, {useState} from "react";
 import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from "@/components/ui/tooltip";
 import {IoMdCloseCircle} from "react-icons/io";
 import {IoIosSettings} from "react-icons/io";
 import {RiDashboardFill} from "react-icons/ri";
-import { GoogleDocsAdapter } from "@/lib/adapters/DocsAdapter";
 
 export enum SidebarType {
     'home' = 'home',
@@ -17,16 +16,6 @@ const Sidebar = (
         closeContent?: () => void
     }) => {
     const [sidebarType, setSidebarType] = useState<SidebarType>(SidebarType.home);
-    const [driveUrl, setDriveUrl] = useState<string | null>(null);
-
-    useEffect(() => {
-        const adapter = new GoogleDocsAdapter();
-        adapter.getDocumentId().then((docId) => {
-            if (docId) {
-                setDriveUrl(`https://drive.google.com/drive/folders/${docId}`);
-            }
-        });
-    }, []);
 
     return (
         <aside
