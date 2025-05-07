@@ -89,12 +89,75 @@ export class GoogleDocsAdapter implements EditorAdapter {
             return res.json();
         };
 
-        // 1. Ensure 'TexFlow' folder exists
-        let texflowFolderId = await this.findOrCreateFolder('TexFlow', null, driveFetch);
-        // 2. Ensure 'TexFlow-{documentId}' folder exists inside 'TexFlow'
-        let envFolderName = `TexFlow-${documentId}`;
-        let envFolderId = await this.findOrCreateFolder(envFolderName, texflowFolderId, driveFetch);
-        return { folderId: envFolderId };
+        const getDocAppProperties = async (docId: string): Promise<any> => {
+            const url = `https://www.googleapis.com/drive/v3/files/${docId}?fields=appProperties`;
+            const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+            if (!res.ok) throw new Error(await res.text());
+            return (await res.json()).appProperties || {};
+        };
+
+        const setDocAppProperties = async (docId: string, appProperties: any) => {
+            const url = `https://www.googleapis.com/drive/v3/files/${docId}`;
+            const res = await fetch(url, {
+                method: 'PATCH',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ appProperties }),
+            });
+            if (!res.ok) throw new Error(await res.text());
+        };
+        
+        const folderExists = async (folderId: string): Promise<boolean> => {
+            try {
+                const url = `https://www.googleapis.com/drive/v3/files/${folderId}?fields=id`;
+                const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+                return res.ok;
+            } catch {
+                return false;
+            }
+        };
+        
+        // Helper: set folder sharing to anyone with link can edit
+        const setFolderSharing = async (folderId: string) => {
+            const url = `https://www.googleapis.com/drive/v3/files/${folderId}/permissions`;
+            const body = {
+                role: 'writer',
+                type: 'anyone',
+                allowFileDiscovery: false,
+            };
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(body),
+            });
+            if (!res.ok) throw new Error(await res.text());
+        };
+
+        // 1. Try to get folderId from doc metadata
+        let appProperties = await getDocAppProperties(documentId);
+        console.log('App properties:', appProperties);
+        let folderId = appProperties?.texflowDriveFolderId;
+        let valid = false;
+        if (folderId) {
+            valid = await folderExists(folderId);
+        }
+        if (!valid) {
+            // 2. Create folder if missing or invalid
+            let texflowFolderId = await this.findOrCreateFolder('TexFlow', null, driveFetch);
+            let envFolderName = `TexFlow-${documentId}`;
+            folderId = await this.findOrCreateFolder(envFolderName, texflowFolderId, driveFetch);
+            // 3. Set sharing
+            await setFolderSharing(folderId);
+            // 4. Update doc metadata
+            appProperties = { ...appProperties, texflowDriveFolderId: folderId };
+            await setDocAppProperties(documentId, appProperties);
+        }
+        return { folderId };
     }
 
     private async findOrCreateFolder(name: string, parentId: string | null, driveFetch: (url: string, options?: any) => Promise<any>): Promise<string> {
